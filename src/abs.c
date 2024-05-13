@@ -172,11 +172,24 @@ static int setup_dev(struct abs_private_dev_data *dev, int index)
   int err_code;
   int dev_num = MKDEV(abs_maj_num, abs_minimal_minor + index);
 
-  cdev_init(&dev->cdev, &abs_fops);
+  err_code = cdev_init(&dev->cdev, &abs_fops);
+  if (err_code < 0) {
+    pr_info("Chrdev init failed!\n");
+    goto setup_error;
+  }
+  
   dev->cdev.owner = THIS_MODULE;
   dev->cdev.ops = &abs_fops;
-  err_code = cdev_add(&dev->cdev, dev_num, 1);
 
+  err_code = cdev_add(&dev->cdev, dev_num, 1);
+  if (err_code < 0) {
+    pr_info("Chrdev adding failed!\n");
+    goto setup_error;
+  }
+  
+  return 0;
+
+setup_error:
   return err_code;
 }
 
@@ -184,8 +197,10 @@ static int abs_probe(struct platform_device *dev_to_bind)
 {
   int result;
 
+  pr_info("Binding started\n");
   struct abs_private_dev_data *dev_data;
   abs_platform_data_t *platform_data;
+  struct device *abs_dev_fs;
 
   platform_data = dev_get_platdata(&dev_to_bind->dev);
   if (!platform_data) {
@@ -211,11 +226,23 @@ static int abs_probe(struct platform_device *dev_to_bind)
     goto probe_error;
   }
 
-  
+  pr_info("Bound successfully\n");
+  abs_dev_fs = device_create(abs_class, 
+                             NULL, 
+                             dev_data->dev_num,
+                             NULL, 
+                             "abs_dev-%d",dev_to_bind->id);
+  if (IS_ERR(abs_dev_fs)) {
+    pr_info("Failed to create /dev file for %d device", dev_to_bind->id);
+    goto probe_error;
+  }
+
+  pr_info("Device number %d created successfully\n", dev_to_bind->id);
 
   return result;
 
 probe_error:
+  pr_info("Binding failed\n");
   return result;
 }
 static int abs_remove(struct platform_device *dev)
@@ -249,7 +276,7 @@ static int __init abs_init(void)
   err_code = alloc_chrdev_region( &dev_num, abs_minimal_minor, NUMBER_OF_DEVICES, DEV_NAME );
   if ( err_code < 0 ) {
     pr_info("Alloc failed\n");
-    goto error;
+    goto init_error;
   }
 
   abs_maj_num = MAJOR(dev_num);
@@ -257,16 +284,17 @@ static int __init abs_init(void)
   abs_class = class_create( THIS_MODULE, CLASS_NAME );
   if ( IS_ERR(abs_class) ) {
     pr_info("Failed to register class!\n");
-    goto error;
+    err_code = abs_class;
+    goto init_error;
   }
 
   platform_driver_register(&abs_platform_driver);
 
   pr_info("Driver registered\n");
 
-  return err_code;
+  return 0;
 
-error:
+init_error:
   abs_cleanup();
   return err_code;
 }

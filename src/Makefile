@@ -1,3 +1,5 @@
+CONFIG_MODULE_SIG=n
+
 obj-m += abs.o
 obj-m += abs_test_devices.o
 

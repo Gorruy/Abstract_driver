@@ -3,6 +3,7 @@
 #include <linux/platform_device.h>
 #include <linux/init.h>
 #include <linux/kdev_t.h>
+#include <linux/string.h>
 
 #include "abs.h"
 
@@ -13,16 +14,17 @@ static void abs_dev_release(struct device *dev)
 }
 
 static struct platform_device devices[NUMBER_OF_DEVICES];
-static abs_platform_data_t dev_data[NUMBER_OF_DEVICES] = {
-    { .size = PAGE_SIZE_IN_BYTES, .permission = 3, .index = "ABSDEV1"},
-    { .size = PAGE_SIZE_IN_BYTES, .permission = 3, .index = "ABSDEV2"},
-    { .size = PAGE_SIZE_IN_BYTES, .permission = 3, .index = "ABSDEV3"},
-    { .size = PAGE_SIZE_IN_BYTES, .permission = 3, .index = "ABSDEV4"}
-};
+static abs_platform_data_t dev_data[NUMBER_OF_DEVICES];
 
 static void create_devs(void)
 {
   size_t i;
+  for ( i = 0; i < NUMBER_OF_DEVICES; i++ ) {
+    dev_data[i].size = PAGE_SIZE_IN_BYTES;
+    dev_data[i].permission = 3;
+    dev_data[i].index = "ABSDEV";
+    strncat(dev_data[i].index, (const char*)('0' + i), 1);
+  }
   for ( i = 0; i < NUMBER_OF_DEVICES; i++ ) {
     devices[i].id = i;
     devices[i].name = PLATFORM_DEVICE_NAME;

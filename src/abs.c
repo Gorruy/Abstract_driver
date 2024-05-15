@@ -28,7 +28,7 @@ typedef struct abs_page {
 struct abs_private_dev_data {
   abs_platform_data_t platform_data;
   page_t *page;
-  uint64_t size;
+  int size;
   struct semaphore sem;
   struct cdev cdev;
   dev_t dev_num;
@@ -45,9 +45,9 @@ static int abs_open(struct inode *inode, struct file *file)
 }
 
 static ssize_t abs_read(struct file *file,
-                               char __user *buf,
-                               size_t count,
-                               loff_t *f_pos)
+                        char __user *buf,
+                        size_t count,
+                        loff_t *f_pos)
 {
   struct abs_private_dev_data *dev = file->private_data;
 
@@ -74,14 +74,14 @@ static ssize_t abs_read(struct file *file,
 }
 
 static ssize_t abs_write(struct file *file,
-                                const char __user *buf,
-                                size_t count ,
-                                loff_t *f_pos)
+                         const char __user *buf,
+                         size_t count ,
+                         loff_t *f_pos)
 {
-  struct abs_private_dev_data *dev = file->private_data;
+  struct abs_private_dev_data *private_data = file->private_data;
   ssize_t result = -ENOMEM;
 
-  if (down_interruptible(&dev->sem)) {
+  if (down_interruptible(&private_data->sem)) {
     return -ERESTARTSYS;
   }
 
@@ -89,23 +89,26 @@ static ssize_t abs_write(struct file *file,
     return result;
   }
 
-  if (copy_from_user(dev->page->data, buf, count)) {
+  if (copy_from_user(private_data->page->data, buf, count)) {
     result = -EFAULT;
   }
 
-  up(&dev->sem);
+  up(&private_data->sem);
   return result;
-  
 }
 
 static loff_t abs_llseek(struct file *file,
-                                loff_t offset,
-                                int whence)
+                         loff_t offset,
+                         int whence)
 {
   struct abs_private_dev_data *private_data = file->private_data;
   int max_size = private_data->size;
 
   loff_t temp;
+
+  if (down_interruptable(&private_data->sem)) {
+    return -ERESTARTSYS;
+  }
 
   pr_info("Starting lseek\n");
   
@@ -139,19 +142,23 @@ static loff_t abs_llseek(struct file *file,
   }
 
   pr_info("Lseek is finished\n");
+  up(&private_data->sem);
 
   return file->f_pos;
 }
 
-static int abs_mmap(struct file *file,
-                            struct vm_area_struct *area)
+static int abs_mmap( struct file *file, struct vm_area_struct *area )
 {
   int result;
-  return result;
+
+
+  return 0;
+
+mmap_error:
+  return err_code;
 }
 
-static int abs_release (struct inode *node,
-                                struct file *file)
+static int abs_release (struct inode *node, struct file *file)
 {
   int result;
   return result;
@@ -167,7 +174,7 @@ static struct file_operations abs_fops = {
   .release = abs_release
 };
 
-static int setup_dev(struct abs_private_dev_data *dev, int index)
+static int setup_chrdev(struct abs_private_dev_data *dev, int index)
 {
   int err_code;
   int dev_num = MKDEV(abs_maj_num, abs_minimal_minor + index);
@@ -193,6 +200,21 @@ setup_error:
   return err_code;
 }
 
+static ssize_t abs_show(struct device *dev,
+                        struct device_attribute *attr,
+                        char *buf)
+{
+  return 0;
+}
+
+static ssize_t abs_store(struct device *dev, 
+                         struct device_attribute *attr,
+                         const char *buf, 
+                         size_t count)
+{
+  return 0;
+}
+
 static int abs_probe(struct platform_device *dev_to_bind) 
 {
   int result;
@@ -205,13 +227,15 @@ static int abs_probe(struct platform_device *dev_to_bind)
   platform_data = dev_get_platdata(&dev_to_bind->dev);
   if (!platform_data) {
     pr_info("Can't obtain any platform data from device\n");
-    return -EINVAL;
+    result = -EINVAL;
+    goto probe_error;
   }
 
   dev_data = devm_kzalloc( &dev_to_bind->dev, sizeof(struct abs_private_dev_data), GFP_KERNEL );
   if (!dev_data) {
     pr_info("Memory allocation failed!\n");
-    return -ENOMEM;
+    result = -ENOMEM;
+    goto probe_error;
   }
   
   dev_set_drvdata(&dev_to_bind->dev, dev_data);
@@ -220,13 +244,13 @@ static int abs_probe(struct platform_device *dev_to_bind)
   dev_data->page = devm_kzalloc( &dev_to_bind->dev, PAGE_SIZE_IN_BYTES, GFP_KERNEL );
 
   dev_data->dev_num = MKDEV(abs_maj_num, dev_to_bind->id);
-  result = setup_dev(dev_data, dev_to_bind->id);
+  result = setup_chrdev(dev_data, dev_to_bind->id);
   if ( result < 0 ) {
     pr_err("Failed to setup chrdev\n");
     goto probe_error;
   }
 
-  pr_info("Bound successfully\n");
+  pr_info("Bounding succeed\n");
   abs_dev_fs = device_create(abs_class, 
                              NULL, 
                              dev_data->dev_num,
@@ -245,10 +269,12 @@ probe_error:
   pr_info("Binding failed\n");
   return result;
 }
-static int abs_remove(struct platform_device *dev)
+
+static int abs_remove(struct platform_device *dev_to_destroy)
 {
-  int result;
-  return result;
+  device_destroy(abs_class, dev_to_destroy->dev->dev_num);
+  cdev_del(&dev_to_destroy->cdev);
+  return 0;
 }
 
 struct platform_driver abs_platform_driver = {

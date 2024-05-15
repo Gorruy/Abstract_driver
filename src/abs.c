@@ -5,8 +5,8 @@
 #include <linux/export.h>
 #include <linux/init.h>
 #include <linux/types.h>
+#include <linux/uaccess.h>
 #include <linux/fs.h>
-#include <asm/uaccess.h>
 #include <linux/errno.h>
 #include <linux/platform_device.h>
 #include <linux/mod_devicetable.h>
@@ -29,9 +29,9 @@ struct abs_private_dev_data {
   abs_platform_data_t platform_data;
   page_t *page;
   int size;
-  struct semaphore sem;
   struct cdev cdev;
   dev_t dev_num;
+  struct mutex mtx;
 };
 
 static int abs_open(struct inode *inode, struct file *file)
@@ -39,7 +39,9 @@ static int abs_open(struct inode *inode, struct file *file)
   struct abs_private_dev_data *dev;
 
   dev = container_of( inode->i_cdev, struct abs_private_dev_data, cdev );
+  mutex_lock(&dev->mtx);
   file->private_data = dev;
+  mutex_unlock(&dev->mtx);
 
   return 0;
 }
@@ -51,9 +53,7 @@ static ssize_t abs_read(struct file *file,
 {
   struct abs_private_dev_data *dev = file->private_data;
 
-  if (down_interruptible(&dev->sem)) {
-    return -ERESTARTSYS;
-  }
+  mutex_lock(&private_data->mtx);
 
   if ( *f_pos >= dev->size ) {
     return 0;
@@ -68,7 +68,7 @@ static ssize_t abs_read(struct file *file,
   } 
 
   *f_pos += count;
-  up(&dev->sem);
+  mutex_unclock(&private_data->mtx);
 
   return count;
 }
@@ -81,10 +81,7 @@ static ssize_t abs_write(struct file *file,
   struct abs_private_dev_data *private_data = file->private_data;
   ssize_t result = -ENOMEM;
 
-  if (down_interruptible(&private_data->sem)) {
-    return -ERESTARTSYS;
-  }
-
+  mutex_lock(&private_data->mtx);
   if ( *f_pos >= PAGE_SIZE_IN_BYTES ) {
     return result;
   }
@@ -93,7 +90,7 @@ static ssize_t abs_write(struct file *file,
     result = -EFAULT;
   }
 
-  up(&private_data->sem);
+  mutex_unlock(&private_data->mtx);
   return result;
 }
 
@@ -101,14 +98,11 @@ static loff_t abs_llseek(struct file *file,
                          loff_t offset,
                          int whence)
 {
+  mutex_lock(&file->private_data->mtx);
   struct abs_private_dev_data *private_data = file->private_data;
   int max_size = private_data->size;
 
   loff_t temp;
-
-  if (down_interruptable(&private_data->sem)) {
-    return -ERESTARTSYS;
-  }
 
   pr_info("Starting lseek\n");
   
@@ -142,7 +136,7 @@ static loff_t abs_llseek(struct file *file,
   }
 
   pr_info("Lseek is finished\n");
-  up(&private_data->sem);
+  mutex_unlock(&file->private_data->mtx);
 
   return file->f_pos;
 }
@@ -231,6 +225,8 @@ static int abs_probe(struct platform_device *dev_to_bind)
     goto probe_error;
   }
 
+  mutex_init(dev_data->mtx);
+
   dev_data = devm_kzalloc( &dev_to_bind->dev, sizeof(struct abs_private_dev_data), GFP_KERNEL );
   if (!dev_data) {
     pr_info("Memory allocation failed!\n");
@@ -272,6 +268,7 @@ probe_error:
 
 static int abs_remove(struct platform_device *dev_to_destroy)
 {
+  mutex_destroy(&dev_to_destroy->mtx);
   device_destroy(abs_class, dev_to_destroy->dev->dev_num);
   cdev_del(&dev_to_destroy->cdev);
   return 0;

@@ -9,8 +9,8 @@
 #define PLATFORM_DEVICE_NAME "abs_platform_device"
 
 typedef struct abs_platform_data {
-  int size;
-  int permission;
-  char *index;
+    int size;
+    char *index;
+    uint8_t data[PAGE_SIZE_IN_BYTES];
 } abs_platform_data_t;
 #endif

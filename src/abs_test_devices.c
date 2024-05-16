@@ -18,50 +18,49 @@ static abs_platform_data_t dev_data[NUMBER_OF_DEVICES];
 
 static void create_devs(void)
 {
-  size_t i;
-  for ( i = 0; i < NUMBER_OF_DEVICES; i++ ) {
-    dev_data[i].size = PAGE_SIZE_IN_BYTES;
-    dev_data[i].permission = 3;
-    dev_data[i].index = "ABSDEV";
-    strncat(dev_data[i].index, (const char*)('0' + i), 1);
-  }
-  for ( i = 0; i < NUMBER_OF_DEVICES; i++ ) {
-    devices[i].id = i;
-    devices[i].name = PLATFORM_DEVICE_NAME;
-    devices[i].dev.platform_data = &dev_data[i];
-    devices[i].dev.release = abs_dev_release;
-  }
+    size_t i;
+    for ( i = 0; i < NUMBER_OF_DEVICES; i++ ) {
+      dev_data[i].size = PAGE_SIZE_IN_BYTES;
+      dev_data[i].index = "ABSDEV";
+      strncat(dev_data[i].index, (const char*)('0' + i), 1);
+    }
+    for ( i = 0; i < NUMBER_OF_DEVICES; i++ ) {
+      devices[i].id = i;
+      devices[i].name = PLATFORM_DEVICE_NAME;
+      devices[i].dev.platform_data = &dev_data[i];
+      devices[i].dev.release = abs_dev_release;
+    }
 }
 
 static int __init abs_devices_init(void)
 {
-  int err_code;
-  size_t i;
-
-  create_devs();
-
-  pr_info("Adding devices\n");
-  for ( i = 0; i < NUMBER_OF_DEVICES; i++ ) {
-    err_code = platform_device_register(&devices[i]);
-    if ( err_code < 0 ) {
-      pr_info("Device registration failed for %ld device", i);
-      goto init_error;
+    int err_code;
+    size_t i;
+  
+    create_devs();
+  
+    pr_info("Adding devices\n");
+    for ( i = 0; i < NUMBER_OF_DEVICES; i++ ) {
+      err_code = platform_device_register(&devices[i]);
+      if ( err_code < 0 ) {
+        pr_info("Device registration failed for %ld device", i);
+        goto init_error;
+      }
     }
-  }
-
-  return 0;
+  
+    return 0;
 
 init_error:
-  pr_info("Init failed\n");
-  return err_code;
+    pr_info("Init failed\n");
+    return err_code;
 }
 
 static void __exit abs_devices_exit(void)
 {
-  size_t i;
-  for ( i = 0; i < NUMBER_OF_DEVICES; i++ ) {
-    platform_device_unregister(&devices[i]);
-  }
+    size_t i;
+    for ( i = 0; i < NUMBER_OF_DEVICES; i++ ) {
+      platform_device_unregister(&devices[i]);
+    }
 }
 
 module_init(abs_devices_init);

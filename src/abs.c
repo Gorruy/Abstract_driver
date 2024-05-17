@@ -39,7 +39,6 @@ static int abs_release (struct inode*, struct file*);
 
 struct abs_private_dev_data {
     abs_platform_data_t *platform_data;
-    int size;
     struct cdev cdev;
     dev_t dev_num;
     int address_from_sysfs;
@@ -88,6 +87,7 @@ static ssize_t abs_show(struct device *dev,
     int addr;
     struct abs_private_dev_data *private_data;
     
+    pr_info("Start show\n");
     // No reading from address!!
     if (strcmp(attr->attr.name,"abs_address") == 0) {
         pr_err("Bad read from address attribute");
@@ -127,6 +127,7 @@ static ssize_t abs_store(struct device *dev,
     int *addr;
     struct abs_private_dev_data *private_data;
 
+    pr_info("Storing started\n");
     private_data = container_of(dev->platform_data, 
                                 struct abs_private_dev_data, 
                                 platform_data);
@@ -153,14 +154,16 @@ static ssize_t abs_store(struct device *dev,
     }
 
     mutex_unlock(&private_data->mtx);
+
+    pr_info("Storing is over, val:%ld", result);
     return result;
 
 store_error:
     return result;
 }
 
-DEVICE_ATTR(abs_value, 0600, abs_show, abs_store);
-DEVICE_ATTR(abs_address, 0600, abs_show, abs_store);
+DEVICE_ATTR(abs_value, 0644, abs_show, abs_store);
+DEVICE_ATTR(abs_address, 0644, abs_show, abs_store);
 
 static int abs_probe(struct platform_device *dev_to_bind) 
 {
@@ -178,19 +181,28 @@ static int abs_probe(struct platform_device *dev_to_bind)
     if (!dev_data) {
         pr_warn("Memory allocation failed for dev struct!\n");
         result = -ENOMEM;
-        goto probe_error;
+        goto probe_dev_alloc_error;
     }
   
     platform_data = dev_get_platdata(&dev_to_bind->dev);
     if (platform_data) {
         dev_data->platform_data = platform_data;
+        dev_data->platform_data->data = devm_kzalloc(&dev_to_bind->dev,
+                                                     PAGE_SIZE_IN_BYTES,
+                                                     GFP_DMA);
+        if (!dev_data->platform_data->data) {
+            pr_warn("Memory allocation failed for dev data!\n");
+            result = -ENOMEM;
+            goto probe_data_alloc_error;
+        }
     }
     else {
+        pr_info("No platform data, obtain with get_platdata\n");
         res = platform_get_resource(dev_to_bind, IORESOURCE_MEM, 0);
         if (!request_mem_region(res->start, res->end - res->start, DRIVER_NAME)) {
             pr_warn("Cant access device registers!\n");
             result = -EINVAL;
-            goto probe_error;
+            goto probe_data_alloc_error;
         }
 
         dev_data->platform_data->data = devm_ioremap(&dev_to_bind->dev, 
@@ -199,7 +211,7 @@ static int abs_probe(struct platform_device *dev_to_bind)
         if (!dev_data->platform_data->data) {
             pr_warn("Remap failed\n");
             result = -ENOMEM;
-            goto probe_error;
+            goto probe_req_reg_error;
         }
 
         dev_data->address_from_sysfs = 0;
@@ -209,9 +221,8 @@ static int abs_probe(struct platform_device *dev_to_bind)
     result = setup_chrdev(dev_data, dev_to_bind->id);
     if ( result < 0 ) {
         pr_warn("Failed to setup chrdev\n");
-        goto probe_error;
+        goto probe_setup_chd_error;
     }
-    pr_info("Bounding succeed\n");
     
     mutex_init(&dev_data->mtx);
 
@@ -220,9 +231,12 @@ static int abs_probe(struct platform_device *dev_to_bind)
                                dev_data->dev_num,
                                dev_data, 
                                "abs_dev-%d",dev_to_bind->id);
+
+    dev_set_drvdata(&dev_to_bind->dev, dev_data);
+
     if (IS_ERR(abs_dev_fs)) {
         pr_warn("Failed to create /dev file for %d device", dev_to_bind->id);
-        goto probe_error;
+        goto probe_dev_create_error;
     }
 
     if (device_create_file(&dev_to_bind->dev, &dev_attr_abs_value)) {
@@ -234,12 +248,28 @@ static int abs_probe(struct platform_device *dev_to_bind)
         goto probe_error;
     }
   
-    pr_info("Device number %d created successfully\n", dev_to_bind->id);
+    pr_info("Device number %d created successfully\n", dev_to_bind->id + 1);
   
-    return result;
+    return 0;
 
 probe_error:
-    pr_warn("Binding failed\n");
+    device_destroy(abs_class, dev_data->dev_num);
+
+probe_dev_create_error:
+    cdev_del(&dev_data->cdev);
+
+probe_setup_chd_error:
+    kfree(dev_data->platform_data->data);
+
+probe_data_alloc_error:
+    kfree(dev_data);
+
+probe_dev_alloc_error:
+    return result;
+
+probe_req_reg_error:
+    kfree(dev_data);
+    release_region(res->start, res->end - res->start);
     return result;
 }
 
@@ -247,14 +277,14 @@ static int abs_remove(struct platform_device *dev_to_destroy)
 {
     struct abs_private_dev_data *pdata;
 
+    pr_info("Device removing started\n");
+
     pdata = dev_get_drvdata(&dev_to_destroy->dev);
-    mutex_lock(&pdata->mtx);
-
-    device_destroy(abs_class, pdata->dev_num);
     cdev_del(&pdata->cdev);
-
-    mutex_unlock(&pdata->mtx);
     mutex_destroy(&pdata->mtx);
+    device_destroy(abs_class, pdata->dev_num);
+
+    pr_info("Device removed\n");
 
     return 0;
 }
@@ -324,12 +354,16 @@ module_exit(abs_exit);
 static int abs_open(struct inode *inode, struct file *filp)
 {
     struct abs_private_dev_data *private_data;
-  
+    
+    pr_info("Open file\n");
+
     private_data = container_of(inode->i_cdev, struct abs_private_dev_data, cdev);
     mutex_lock(&private_data->mtx);
     filp->private_data = private_data;
     try_module_get(THIS_MODULE);
     mutex_unlock(&private_data->mtx);
+
+    pr_info("Opening succeed\n");
   
     return 0;
 }
@@ -339,26 +373,40 @@ static ssize_t abs_read(struct file *file,
                         size_t count,
                         loff_t *f_pos)
 {
+    ssize_t result;
     struct abs_private_dev_data *private_data = file->private_data;
+
+    pr_info("Reading from file, count: %ld\n", count);;
   
     mutex_lock(&private_data->mtx);
   
-    if ( *f_pos >= private_data->size ) {
-        return 0;
+    if ( *f_pos >= PAGE_SIZE_IN_BYTES / sizeof(loff_t) ) {
+        pr_info("EOF\n");
+        result = 0; // EOF
+        goto read_err;
     }
   
-    if ( *f_pos + count > private_data->size ) {
-        count = private_data->size - *f_pos;
+    if ( *f_pos + count > PAGE_SIZE_IN_BYTES / sizeof(loff_t) ) {
+        pr_info("Partial read\n");
+        count = PAGE_SIZE_IN_BYTES / sizeof(loff_t) - *f_pos;
     }
   
     if (copy_to_user(buf, &private_data->platform_data->data[*f_pos], count)) {
-        return -EFAULT;
+        result = -EFAULT;
+        goto read_err;
     } 
   
     *f_pos += count;
     mutex_unlock(&private_data->mtx);
+
+    pr_info("Reading succeed, new fpos = %lld\n", *f_pos);
   
     return count;
+
+read_err:
+    pr_warn("Read failed\n");
+    mutex_unlock(&private_data->mtx);
+    return result;
 }
 
 static ssize_t abs_write(struct file *filp,
@@ -369,16 +417,21 @@ static ssize_t abs_write(struct file *filp,
     struct abs_private_dev_data *private_data = filp->private_data;
     ssize_t result = -ENOMEM;
 
+    pr_info("Writing started, count = %ld, fpos = %lld\n", count, *f_pos);
+
     mutex_lock(&private_data->mtx);
     if ( *f_pos >= PAGE_SIZE_IN_BYTES ) {
-        return result;
+        goto end;
     }
 
     if (copy_from_user(private_data->platform_data->data, buf, count)) {
         result = -EFAULT;
     }
 
+end:
     mutex_unlock(&private_data->mtx);
+
+    pr_info("Writing succeed\n");
     return result;
 }
 
@@ -392,7 +445,7 @@ static loff_t abs_llseek(struct file *filp,
     struct abs_private_dev_data *private_data = filp->private_data;
 
     mutex_lock(&private_data->mtx);
-    max_size = private_data->size;
+    max_size = PAGE_SIZE_IN_BYTES / sizeof(loff_t);
   
     pr_info("Starting lseek\n");
     
@@ -452,9 +505,11 @@ static int abs_mmap( struct file *filp, struct vm_area_struct *area )
     }
     SetPageReserved(virt_to_page((unsigned long)private_data->platform_data->data));
   
+    mutex_unlock(&private_data->mtx);
     return result;
   
   mmap_error:
+    mutex_unlock(&private_data->mtx);
     return result;
 }
 

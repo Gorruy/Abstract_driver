@@ -26,7 +26,7 @@ static void create_devs(void)
     }
     for ( i = 0; i < NUMBER_OF_DEVICES; i++ ) {
       devices[i].id = i;
-      devices[i].name = PLATFORM_DEVICE_NAME;
+      devices[i].name = dev_data[i].index;
       devices[i].dev.platform_data = &dev_data[i];
       devices[i].dev.release = abs_dev_release;
     }

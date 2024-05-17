@@ -41,8 +41,8 @@ struct abs_private_dev_data {
     abs_platform_data_t *platform_data;
     struct cdev cdev;
     dev_t dev_num;
-    int address_from_sysfs;
-    int value_from_sysfs;
+    int address_from_sysfs; // will hold offset to which data from abs_value attr will be written
+    int value_from_sysfs; 
     struct mutex mtx;
 };
 
@@ -58,6 +58,8 @@ static struct file_operations abs_fops = {
 
 static int setup_chrdev(struct abs_private_dev_data *dev, int index)
 {
+    /* Helper function for device initialization during probe
+       todo: move to probe*/
     int err_code;
     dev->dev_num = MKDEV(abs_maj_num, abs_minimal_minor + index);
   
@@ -83,8 +85,10 @@ static ssize_t abs_show(struct device *dev,
                         struct device_attribute *attr,
                         char *buf)
 {
+    /* Read callback for sysfs*/
     ssize_t result;
     int addr;
+    char val;
     struct abs_private_dev_data *private_data;
     
     pr_info("Start show\n");
@@ -94,10 +98,9 @@ static ssize_t abs_show(struct device *dev,
         result = -EACCES;
         goto show_error;
     }
-
-    private_data = container_of(dev->platform_data, 
-                                struct abs_private_dev_data, 
-                                platform_data);
+    
+    // Get device specific data (mutex, platform_data->data etc)
+    private_data = dev_get_drvdata(dev);
     if (IS_ERR(private_data)) {
         pr_warn("Unable to get device private data in abs_show call\n");
         result = -ENOENT;
@@ -107,11 +110,14 @@ static ssize_t abs_show(struct device *dev,
     mutex_lock(&private_data->mtx);
 
     addr = private_data->address_from_sysfs;
+    val = private_data->platform_data->data[addr];
+    pr_info("Expected addr:%d, value:%d", addr, val);
 
-    result = sprintf(buf, "%c", private_data->platform_data->data[addr]);
+    result = sprintf(buf, "%c", val);
 
     mutex_unlock(&private_data->mtx);
 
+    pr_info("Show succeed\n");
     return 0;
 
 show_error:
@@ -128,9 +134,8 @@ static ssize_t abs_store(struct device *dev,
     struct abs_private_dev_data *private_data;
 
     pr_info("Storing started\n");
-    private_data = container_of(dev->platform_data, 
-                                struct abs_private_dev_data, 
-                                platform_data);
+
+    private_data = dev_get_drvdata(dev);
     if (IS_ERR(private_data)) {
         pr_warn("Unable to get device private data in abs_show call\n");
         result = -ENOENT;
@@ -155,7 +160,7 @@ static ssize_t abs_store(struct device *dev,
 
     mutex_unlock(&private_data->mtx);
 
-    pr_info("Storing is over, val:%ld", result);
+    pr_info("Storing is over, val:%d, addr:%d", private_data->platform_data->data[*addr], *addr);
     return result;
 
 store_error:
@@ -491,6 +496,7 @@ static int abs_mmap( struct file *filp, struct vm_area_struct *area )
     struct abs_private_dev_data *private_data = filp->private_data;
 
     mutex_lock(&private_data->mtx);
+    pr_info("Mmap started\n");
   
     area->vm_pgoff = virt_to_phys(private_data->platform_data->data) >> PAGE_SHIFT;
     result = remap_pfn_range(area, 
@@ -505,6 +511,7 @@ static int abs_mmap( struct file *filp, struct vm_area_struct *area )
     }
     SetPageReserved(virt_to_page((unsigned long)private_data->platform_data->data));
   
+    pr_info("Mmap succeed\n");
     mutex_unlock(&private_data->mtx);
     return result;
   

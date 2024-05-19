@@ -293,13 +293,13 @@ static int abs_remove(struct platform_device *dev_to_destroy)
         struct abs_private_dev_data *pdata;
     
         dev_dbg(&dev_to_destroy->dev, "Device removing started\n");
-    
         pdata = dev_get_drvdata(&dev_to_destroy->dev);
+        ClearPageReserved(virt_to_page((unsigned long)pdata->platform_data->data));
         cdev_del(&pdata->cdev);
         mutex_destroy(&pdata->mtx);
         device_destroy(abs_class, pdata->dev_num);
     
-        dev_dbg(&dev_to_destroy->dev, "Device removed\n");
+        pr_debug("Device removed\n");
     
         return 0;
 }

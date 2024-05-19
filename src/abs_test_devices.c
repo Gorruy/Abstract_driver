@@ -38,7 +38,7 @@ static int __init abs_devices_init(void)
     
       create_devs();
     
-      pr_info("Adding devices\n");
+      pr_debug("Adding devices\n");
       for ( i = 0; i < NUMBER_OF_DEVICES; i++ ) {
             err_code = platform_device_register(&devices[i]);
             if ( err_code < 0 ) {
@@ -50,7 +50,7 @@ static int __init abs_devices_init(void)
       return 0;
 
 init_error:
-        pr_info("Init failed\n");
+        pr_warn("Init failed\n");
         return err_code;
 }
 

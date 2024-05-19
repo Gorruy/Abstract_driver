@@ -43,7 +43,7 @@ int main(void)
     memset(ch, 0, 20);
 
     char *arr;
-    arr = mmap(arr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(file), 0);
+    arr = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(file), 0);
     arr[0] = 'A';
     arr[1] = 'B';
     arr[2] = 'C';

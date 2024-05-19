@@ -23,7 +23,6 @@ int main(void)
     }
 
     fprintf(file, "Some text\n");
-    fprintf(file, "\0");
     fsync(fileno(file));
 
     rewind(file);

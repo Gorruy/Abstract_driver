@@ -14,6 +14,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/mm.h>
 #include <linux/kobject.h>
+#include <linux/dma-direct.h>
 
 #include <linux/version.h>
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 11, 0)
@@ -44,6 +45,7 @@ struct abs_private_dev_data {
     int address_from_sysfs; // will hold offset to which data from abs_value attr will be written
     int value_from_sysfs; 
     struct mutex mtx;
+    struct device *devp;
 };
 
 static struct file_operations abs_fops = {
@@ -111,9 +113,9 @@ static ssize_t abs_show(struct device *dev,
 
     addr = private_data->address_from_sysfs;
     val = private_data->platform_data->data[addr];
-    pr_info("Expected addr:%d, value:%d", addr, val);
+    pr_info("Expected addr:%d, value:%d\n", addr, val);
 
-    result = sprintf(buf, "%c", val);
+    buf[0] = val;
 
     mutex_unlock(&private_data->mtx);
 
@@ -160,7 +162,7 @@ static ssize_t abs_store(struct device *dev,
 
     mutex_unlock(&private_data->mtx);
 
-    pr_info("Storing is over, val:%d, addr:%d", private_data->platform_data->data[*addr], *addr);
+    pr_info("Storing is over, val:%d, addr:%d\n", private_data->platform_data->data[*addr], *addr);
     return result;
 
 store_error:
@@ -236,6 +238,8 @@ static int abs_probe(struct platform_device *dev_to_bind)
                                dev_data->dev_num,
                                dev_data, 
                                "abs_dev-%d",dev_to_bind->id);
+
+    dev_data->devp = &dev_to_bind->dev;
 
     dev_set_drvdata(&dev_to_bind->dev, dev_data);
 
@@ -365,6 +369,7 @@ static int abs_open(struct inode *inode, struct file *filp)
     private_data = container_of(inode->i_cdev, struct abs_private_dev_data, cdev);
     mutex_lock(&private_data->mtx);
     filp->private_data = private_data;
+    filp->f_pos = 0;
     try_module_get(THIS_MODULE);
     mutex_unlock(&private_data->mtx);
 
@@ -420,18 +425,23 @@ static ssize_t abs_write(struct file *filp,
                          loff_t *f_pos)
 {
     struct abs_private_dev_data *private_data = filp->private_data;
-    ssize_t result = -ENOMEM;
+    ssize_t result = 0;
 
     pr_info("Writing started, count = %ld, fpos = %lld\n", count, *f_pos);
 
     mutex_lock(&private_data->mtx);
     if ( *f_pos >= PAGE_SIZE_IN_BYTES ) {
+        result = -ENOMEM;
         goto end;
     }
 
     if (copy_from_user(private_data->platform_data->data, buf, count)) {
         result = -EFAULT;
+        goto end;
     }
+
+    result = count;
+    filp->f_pos += count;
 
 end:
     mutex_unlock(&private_data->mtx);
@@ -489,7 +499,7 @@ static loff_t abs_llseek(struct file *filp,
     return filp->f_pos;
 }
 
-static int abs_mmap( struct file *filp, struct vm_area_struct *area )
+static int abs_mmap(struct file *filp, struct vm_area_struct *area) 
 {
     int result;
   
@@ -499,11 +509,12 @@ static int abs_mmap( struct file *filp, struct vm_area_struct *area )
     pr_info("Mmap started\n");
   
     area->vm_pgoff = virt_to_phys(private_data->platform_data->data) >> PAGE_SHIFT;
+    area->vm_file = filp;
     result = remap_pfn_range(area, 
                              area->vm_start, 
                              area->vm_pgoff, 
                              area->vm_end - area->vm_start, 
-                             area->vm_page_prot);
+                             PAGE_SHARED);
     if (result) {
         pr_warn("Mmap remap failed\n");
         result = -EIO;
@@ -516,6 +527,7 @@ static int abs_mmap( struct file *filp, struct vm_area_struct *area )
     return result;
   
   mmap_error:
+    pr_info("Mmap failed\n");
     mutex_unlock(&private_data->mtx);
     return result;
 }

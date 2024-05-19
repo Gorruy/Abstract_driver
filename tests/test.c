@@ -12,11 +12,12 @@
 int main(void) 
 {
     char buf[4096];
+    char ch[20];
 
     FILE *file = fopen("/dev/abs_dev-0", "w+r");
     FILE *file1 = fopen("/dev/abs_dev-1", "w+r");
 
-    if (!file) {
+    if (!file || !file1) {
         perror("Failed to open file\n");
         exit(1);
     }
@@ -27,47 +28,34 @@ int main(void)
 
     rewind(file);
 
-    printf("There should be blank line:\n");
-    char ch;
-    do {
-        ch = fgetc(file1);
-        if (ch==EOF) {
-            printf("\n");
-            break;
-        }
-        printf("%c", ch);
- 
-    } while (ch != EOF);
+    read(fileno(file), ch, 20);
 
-    printf("There should be <Some text>:\n");
-    do {
-        ch = fgetc(file);
-        if (ch==EOF) {
-            break;
-        }
-        printf("%c", ch);
- 
-    } while (ch != EOF);
+    printf("Write, read and lseek check. There should be <Some text>:\n");
+    printf("%.*s",20, ch);
+
+    memset(ch, 0, 20);
+
+    read(fileno(file1), ch, 20);
+
+    printf("Files independence check. There should be blank line:\n");
+    printf("%.*s",20, ch);
+    printf("\n");
+
+    memset(ch, 0, 20);
 
     char *arr;
-    arr = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(file1), 0);
-
+    arr = mmap(arr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(file), 0);
     arr[0] = 'A';
     arr[1] = 'B';
     arr[2] = 'C';
     arr[3] = 'D';
-    arr[4] = '\n';    
+    arr[4] = '\n'; 
+    fsync(fileno(file));
 
-    rewind(file1);
+    rewind(file);
 
-    printf("There should be <ABCD>:\n");
-    do {
-        ch = fgetc(file1);
-        if (ch==EOF) {
-            break;
-        }
-        printf("%c", ch);
-    } while (ch != EOF);
+    printf("Mmap write check. There should be <ABCD>:\n");
+    printf("%.*s",5, arr);
 
     return 0;
 }

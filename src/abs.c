@@ -366,6 +366,7 @@ static int abs_open(struct inode *inode, struct file *filp)
     
     pr_info("Open file\n");
 
+    // Get device data
     private_data = container_of(inode->i_cdev, struct abs_private_dev_data, cdev);
     mutex_lock(&private_data->mtx);
     filp->private_data = private_data;
@@ -390,12 +391,14 @@ static ssize_t abs_read(struct file *file,
   
     mutex_lock(&private_data->mtx);
   
+    // trying to read outside memory
     if ( *f_pos >= PAGE_SIZE_IN_BYTES / sizeof(loff_t) ) {
         pr_info("EOF\n");
         result = 0; // EOF
         goto read_err;
     }
   
+    // trying to read more than we can
     if ( *f_pos + count > PAGE_SIZE_IN_BYTES / sizeof(loff_t) ) {
         pr_info("Partial read\n");
         count = PAGE_SIZE_IN_BYTES / sizeof(loff_t) - *f_pos;

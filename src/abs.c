@@ -93,7 +93,7 @@ static ssize_t abs_show(struct device *dev,
     char val;
     struct abs_private_dev_data *private_data;
     
-    pr_info("Start show\n");
+    pr_info("Start show %s\n", attr->attr.name);
     // No reading from address!!
     if (strcmp(attr->attr.name,"abs_address") == 0) {
         pr_err("Bad read from address attribute");
@@ -115,12 +115,12 @@ static ssize_t abs_show(struct device *dev,
     val = private_data->platform_data->data[addr];
     pr_info("Expected addr:%d, value:%d\n", addr, val);
 
-    buf[0] = val;
+    result = sysfs_emit(buf, "%c\n", val);
 
     mutex_unlock(&private_data->mtx);
 
     pr_info("Show succeed\n");
-    return 0;
+    return result;
 
 show_error:
     return result;

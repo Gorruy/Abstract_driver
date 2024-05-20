@@ -119,7 +119,7 @@ static ssize_t abs_show(struct device *dev,
         val = private_data->platform_data->data[addr];
         dev_dbg(dev, "Expected addr:%d, value:%d\n", addr, val);
     
-        result = sysfs_emit(buf, "%c\n", val);
+        result = sysfs_emit(buf, "%c", val);
     
         mutex_unlock(&private_data->mtx);
     

@@ -48,13 +48,16 @@ int main(void)
     arr[1] = 'B';
     arr[2] = 'C';
     arr[3] = 'D';
-    arr[4] = '\n'; 
+    arr[4] = '\n';
+    arr[5] = 0; 
     fsync(fileno(file));
 
     rewind(file);
 
+    read(fileno(file), ch, 5);
+
     printf("Mmap write check. There should be <ABCD>:\n");
-    printf("%.*s",5, arr);
+    printf("%.*s",5, ch);
 
     return 0;
 }

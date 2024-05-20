@@ -13,7 +13,7 @@
 #define DRIVER_NAME "abs_driver"
 
 typedef struct abs_platform_data {
-    uint8_t *data;
+    char *data;
     char *index;
     size_t size;
 } abs_platform_data_t;

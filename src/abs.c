@@ -188,9 +188,7 @@ static int abs_probe(struct platform_device *dev_to_bind)
     
         dev_dbg(&dev_to_bind->dev, "Binding started\n");
       
-        dev_data = devm_kzalloc(&dev_to_bind->dev, 
-                                sizeof(struct abs_private_dev_data), 
-                                GFP_KERNEL);
+        dev_data = kzalloc(sizeof(struct abs_private_dev_data), GFP_KERNEL);
         if (!dev_data) {
                 dev_warn(&dev_to_bind->dev, "Memory allocation failed for dev struct!\n");
                 result = -ENOMEM;
@@ -200,34 +198,32 @@ static int abs_probe(struct platform_device *dev_to_bind)
         platform_data = dev_get_platdata(&dev_to_bind->dev);
         if (platform_data) {
                 dev_data->platform_data = platform_data;
-                dev_data->platform_data->data = devm_kzalloc(&dev_to_bind->dev,
-                                                             PAGE_SIZE_IN_BYTES,
-                                                             GFP_DMA);
+                dev_data->platform_data->data = kzalloc(PAGE_SIZE_IN_BYTES, GFP_DMA);
                 if (!dev_data->platform_data->data) {
-                        dev_warn(&dev_to_bind->dev, "Memory allocation failed for dev data!\n");
+                        dev_warn(&dev_to_bind->dev, "Dev data alloc failed!\n");
                         result = -ENOMEM;
                         goto probe_data_alloc_error;
                 }
         } else {
-            pr_info("No platform data, obtain with get_platdata\n");
-            res = platform_get_resource(dev_to_bind, IORESOURCE_MEM, 0);
-            if (!request_mem_region(res->start, res->end - res->start, DRIVER_NAME)) {
-                    dev_warn(&dev_to_bind->dev, "Cant access device registers!\n");
-                    result = -EINVAL;
-                    goto probe_data_alloc_error;
-            }
-    
-            dev_data->platform_data->data = devm_ioremap(&dev_to_bind->dev, 
-                                                         res->start, 
-                                                         res->end - res->start);
-            if (!dev_data->platform_data->data) {
-                    dev_warn(&dev_to_bind->dev, "Remap failed\n");
-                    result = -ENOMEM;
-                    goto probe_req_reg_error;
-            }
-    
-            dev_data->address_from_sysfs = 0;
-            dev_data->value_from_sysfs = 0;
+                dev_dbg(&dev_to_bind->dev, "No platform data, obtain with get_platdata\n");
+                res = platform_get_resource(dev_to_bind, IORESOURCE_MEM, 0);
+                if (!request_mem_region(res->start, res->end - res->start, DRIVER_NAME)) {
+                        dev_warn(&dev_to_bind->dev, "Cant access device registers!\n");
+                        result = -EINVAL;
+                        goto probe_data_alloc_error;
+                }
+        
+                dev_data->platform_data->data = devm_ioremap(&dev_to_bind->dev, 
+                                                             res->start, 
+                                                             res->end - res->start);
+                if (!dev_data->platform_data->data) {
+                        dev_warn(&dev_to_bind->dev, "Remap failed\n");
+                        result = -ENOMEM;
+                        goto probe_req_reg_error;
+                }
+        
+                dev_data->address_from_sysfs = 0;
+                dev_data->value_from_sysfs = 0;
         }
       
         result = setup_chrdev(dev_data, dev_to_bind->id);
@@ -243,31 +239,34 @@ static int abs_probe(struct platform_device *dev_to_bind)
                                    dev_data->dev_num,
                                    dev_data, 
                                    "abs_dev-%d",dev_to_bind->id);
-    
-        dev_data->devp = &dev_to_bind->dev;
-    
-        dev_set_drvdata(&dev_to_bind->dev, dev_data);
-    
+
         if (IS_ERR(abs_dev_fs)) {
                 dev_warn(&dev_to_bind->dev, "Failed to create /dev file for %d device", 
                          dev_to_bind->id);
                 goto probe_dev_create_error;
         }
     
+        dev_data->devp = &dev_to_bind->dev;
+    
+        dev_set_drvdata(&dev_to_bind->dev, dev_data);
+    
+    
         if (device_create_file(&dev_to_bind->dev, &dev_attr_abs_value)) {
                 dev_warn(&dev_to_bind->dev, "Failed to create value attr\n");
-                goto probe_error;
+                goto probe_value_error;
         }
         if (device_create_file(&dev_to_bind->dev, &dev_attr_abs_address)) {
                 dev_warn(&dev_to_bind->dev, "Failed to create address attr\n");
-                goto probe_error;
+                goto probe_addr_error;
         }
       
         dev_dbg(&dev_to_bind->dev, "Device number %d created successfully\n", dev_to_bind->id + 1);
       
         return 0;
 
-probe_error:
+probe_addr_error:
+        device_remove_file(&dev_to_bind->dev, &dev_attr_abs_value);
+probe_value_error:
         device_destroy(abs_class, dev_data->dev_num);
 
 probe_dev_create_error:
@@ -295,9 +294,11 @@ static int abs_remove(struct platform_device *dev_to_destroy)
         dev_dbg(&dev_to_destroy->dev, "Device removing started\n");
         pdata = dev_get_drvdata(&dev_to_destroy->dev);
         ClearPageReserved(virt_to_page((unsigned long)pdata->platform_data->data));
+        kfree(pdata->platform_data->data);
         cdev_del(&pdata->cdev);
         mutex_destroy(&pdata->mtx);
         device_destroy(abs_class, pdata->dev_num);
+        kfree(pdata);
     
         pr_debug("Device removed\n");
     
@@ -528,7 +529,7 @@ static int abs_mmap(struct file *filp, struct vm_area_struct *area)
                                  area->vm_start, 
                                  area->vm_pgoff, 
                                  area->vm_end - area->vm_start, 
-                                 PAGE_SHARED);
+                                 area->vm_page_prot);
         if (result) {
                 dev_warn(private_data->devp, "Mmap remap failed\n");
                 result = -EIO;

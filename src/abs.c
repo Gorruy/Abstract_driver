@@ -76,8 +76,8 @@ static int setup_chrdev(struct abs_private_dev_data *private_dev_data, int index
       
         err_code = cdev_add(&private_dev_data->cdev, private_dev_data->dev_num, 1);
         if (err_code < 0) {
-            dev_warn(private_dev_data->devp, "Chrdev adding failed!\n");
-            goto setup_add_error;
+                dev_warn(private_dev_data->devp, "Chrdev adding failed!\n");
+                goto setup_add_error;
         }
         
         return 0;
@@ -342,17 +342,17 @@ static __init int abs_init(void)
                                        NUMBER_OF_DEVICES, 
                                        DEV_NAME);
         if (err_code < 0) {
-              pr_warn("Alloc failed\n");
-              goto init_error;
+                pr_warn("Alloc failed\n");
+                goto init_error;
         }
       
         abs_maj_num = MAJOR(dev_num);
       
         abs_class = class_create(THIS_MODULE, CLASS_NAME);
         if (IS_ERR(abs_class)) {
-               pr_warn("Failed to register class!\n");
-               err_code = PTR_ERR(abs_class);
-               goto init_error;
+                pr_warn("Failed to register class!\n");
+                err_code = PTR_ERR(abs_class);
+                goto init_error;
         }
       
         platform_driver_register(&abs_platform_driver);

@@ -44,8 +44,8 @@ struct abs_private_dev_data {
         struct cdev cdev;
         dev_t dev_num; 
         // will hold offset to which data from abs_value attr will be written
-        int address_from_sysfs;
-        int value_from_sysfs; 
+        unsigned int address_from_sysfs;
+        char value_from_sysfs; 
         struct mutex mtx;
         struct device *devp;
 };
@@ -98,12 +98,6 @@ static ssize_t abs_show(struct device *dev,
         struct abs_private_dev_data *private_data;
         
         dev_dbg(dev, "Start show %s\n", attr->attr.name);
-        // No reading from address!!
-        if (strcmp(attr->attr.name,"abs_address") == 0) {
-                dev_warn(dev, "Bad read from address attribute");
-                result = -EACCES;
-                goto show_error;
-        }
         
         // Get device specific data (mutex, platform_data->data etc)
         private_data = dev_get_drvdata(dev);
@@ -137,7 +131,7 @@ static ssize_t abs_store(struct device *dev,
 {
         /* Write callback for sysfs */
         ssize_t result;
-        int *addr;
+        unsigned int *addr;
         struct abs_private_dev_data *private_data;
     
         dev_dbg(dev, "Storing started\n");
@@ -153,14 +147,19 @@ static ssize_t abs_store(struct device *dev,
     
         addr = &private_data->address_from_sysfs;
     
-        if (strcmp(attr->attr.name,"abs_value") == 0) {
-                result = sscanf(buf, "%c", &private_data->platform_data->data[*addr]);
+        if (strcmp(attr->attr.name, "abs_value") == 0) {
+                private_data->platform_data->data[*addr] = buf[0];
+                // One byte read anyway
+                result = 1;
         } else {
-                result = sscanf(buf,"%d", addr);
+                // 4 bytes read anyway
+                result = 4;
+                *addr = ((unsigned int*)buf)[0];
                 if (private_data->address_from_sysfs > PAGE_SIZE_IN_BYTES) {
                         dev_err(dev, "Invalid value for address write!\n");
                         private_data->address_from_sysfs = 0;
                         result = -EINVAL;
+                        goto store_error;
                 }
         }
     
@@ -172,6 +171,7 @@ static ssize_t abs_store(struct device *dev,
         return result;
 
 store_error:
+        mutex_unlock(&private_data->mtx);
         return result;
 }
 
@@ -415,9 +415,9 @@ static ssize_t abs_read(struct file *file,
         }
       
         // trying to read more than we can
-        if (*f_pos + count > PAGE_SIZE_IN_BYTES / sizeof(loff_t)) {
+        if (*f_pos + count > PAGE_SIZE_IN_BYTES) {
                 dev_warn(private_data->devp, "Partial read\n");
-                count = PAGE_SIZE_IN_BYTES / sizeof(loff_t) - *f_pos;
+                count = PAGE_SIZE_IN_BYTES - *f_pos;
         }
       
         if (copy_to_user(buf, &private_data->platform_data->data[*f_pos], count)) {

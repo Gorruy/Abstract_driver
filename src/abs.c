@@ -450,19 +450,24 @@ static ssize_t abs_write(struct file *filp,
         dev_dbg(private_data->devp, "Writing started, count = %ld, fpos = %lld\n", count, *f_pos);
     
         mutex_lock(&private_data->mtx);
-        if ( *f_pos >= PAGE_SIZE_IN_BYTES ) {
-                result = -ENOMEM;
+
+        if (*f_pos >= PAGE_SIZE_IN_BYTES) {
+                result = 0;
                 goto end;
+        }
+
+        //trying to write more than we can
+        if (count + *f_pos > PAGE_SIZE_IN_BYTES) {
+                count = PAGE_SIZE_IN_BYTES - *f_pos;
         }
     
         if (copy_from_user(private_data->platform_data->data, buf, count)) {
                 result = -EFAULT;
                 goto end;
         }
-    
-        result = count;
-        filp->f_pos += count;
 
+        result = count;
+        *f_pos += count;
 end:
         mutex_unlock(&private_data->mtx);
         dev_dbg(private_data->devp, "Writing succeed\n");

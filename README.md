@@ -41,3 +41,6 @@ fwrite(buf, 1, 1, filp); // Запись в abs_value
 make & sudo ./test
 ```
 Данная программа проверяет работоспособность devfs записывая в файл, читая из него, меняя смещение в файле и отображая память
+
+Системные вызовы (open, write, read, mmap, lseek) применяются к файлам устройств в devfs: /dev/abs_dev-0, /dev/abs_dev-1, /dev/abs_dev-2 и /dev/abs_dev-3
+

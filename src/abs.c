@@ -188,7 +188,7 @@ static int abs_probe(struct platform_device *dev_to_bind)
     
         dev_dbg(&dev_to_bind->dev, "Binding started\n");
       
-        dev_data = devm_kzalloc(&dev_to_bind->dev, sizeof(struct abs_private_dev_data), GFP_KERNEL);
+        dev_data = kzalloc(sizeof(struct abs_private_dev_data), GFP_KERNEL);
         if (!dev_data) {
                 dev_warn(&dev_to_bind->dev, "Memory allocation failed for dev struct!\n");
                 result = -ENOMEM;
@@ -199,7 +199,7 @@ static int abs_probe(struct platform_device *dev_to_bind)
 
         if (platform_data) {
                 dev_data->platform_data = platform_data;
-                dev_data->platform_data->data = devm_kzalloc(&dev_to_bind->dev, PAGE_SIZE_IN_BYTES, GFP_DMA);
+                dev_data->platform_data->data = kmalloc(PAGE_SIZE_IN_BYTES, GFP_KERNEL);
                 if (!dev_data->platform_data->data) {
                         dev_warn(&dev_to_bind->dev, "Dev data alloc failed!\n");
                         result = -ENOMEM;
@@ -262,7 +262,6 @@ static int abs_probe(struct platform_device *dev_to_bind)
         }
       
         dev_dbg(&dev_to_bind->dev, "Device number %d created successfully\n", dev_to_bind->id + 1);
-      
         return 0;
 
 probe_addr_error:
@@ -372,6 +371,7 @@ module_exit(abs_exit);
 
 
 /*-----------Driver's callbacks for systemcalls:--------------*/
+
 
 static int abs_open(struct inode *inode, struct file *filp)
 {
@@ -523,18 +523,29 @@ static loff_t abs_llseek(struct file *filp,
 static int abs_mmap(struct file *filp, struct vm_area_struct *area) 
 {
         int result;
+        int pfn;
+        unsigned long area_size;
       
         struct abs_private_dev_data *private_data = filp->private_data;
     
         mutex_lock(&private_data->mtx);
         dev_dbg(private_data->devp, "Mmap started\n");
+
+        area_size = area->vm_end - area->vm_start;
+        if (area_size > PAGE_SIZE_IN_BYTES) {
+                result = -ENOMEM;
+                dev_warn(private_data->devp, "Mmap failed due to big size of area\n");
+                goto mmap_error;
+        }
       
-        area->vm_pgoff = virt_to_phys(private_data->platform_data->data) >> PAGE_SHIFT;
+        pfn = virt_to_phys(private_data->platform_data->data) >> PAGE_SHIFT;
         area->vm_file = filp;
+        area->vm_flags |= VM_READ | VM_SHARED | VM_WRITE;
+        area->vm_pgoff = pfn;
         result = remap_pfn_range(area, 
-                                 area->vm_start, 
+                                 area->vm_start,
                                  area->vm_pgoff, 
-                                 area->vm_end - area->vm_start, 
+                                 area_size, 
                                  area->vm_page_prot);
         if (result) {
                 dev_warn(private_data->devp, "Mmap remap failed\n");
@@ -542,10 +553,10 @@ static int abs_mmap(struct file *filp, struct vm_area_struct *area)
                 goto mmap_error;
         }
         SetPageReserved(virt_to_page((unsigned long)private_data->platform_data->data));
-      
         dev_dbg(private_data->devp, "Mmap succeed\n");
+
         mutex_unlock(&private_data->mtx);
-        return result;
+        return 0;
   
 mmap_error:
         dev_dbg(private_data->devp, "Mmap failed\n");

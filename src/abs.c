@@ -216,11 +216,12 @@ static int abs_probe(struct platform_device *dev_to_bind)
                 dev_data->platform_data = platform_data;
                 if (platform_data->data) {
                         already_bound = 1;
-                }
-
-                dev_data->platform_data->data = devm_kmalloc(&dev_to_bind->dev, 
+                } else {
+                        dev_data->platform_data->data = devm_kmalloc(&dev_to_bind->dev, 
                                                              PAGE_SIZE_IN_BYTES, 
                                                              GFP_KERNEL);
+                }
+
                 if (!dev_data->platform_data->data) {
                         dev_warn(&dev_to_bind->dev, "Dev data alloc failed!\n");
                         result = -ENOMEM;

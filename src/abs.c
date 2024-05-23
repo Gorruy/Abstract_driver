@@ -113,7 +113,12 @@ static ssize_t abs_show(struct device *dev,
         val = private_data->platform_data->data[addr];
         dev_dbg(dev, "Expected addr:%d, value:%d\n", addr, val);
     
-        result = sysfs_emit(buf, "%c", val);
+        if (strcmp(attr->attr.name, "abs_value") == 0) {
+                result = scnprintf(buf, PAGE_SIZE_IN_BYTES, "value:%d\n", val);
+        }
+        else {
+                result = scnprintf(buf, PAGE_SIZE_IN_BYTES, "addr:%d\n", addr);
+        }
     
         mutex_unlock(&private_data->mtx);
     
@@ -131,7 +136,8 @@ static ssize_t abs_store(struct device *dev,
 {
         /* Write callback for sysfs */
         ssize_t result;
-        unsigned int *addr;
+        unsigned int *addrp;
+        unsigned int val_buf;
         struct abs_private_dev_data *private_data;
     
         dev_dbg(dev, "Storing started\n");
@@ -140,37 +146,43 @@ static ssize_t abs_store(struct device *dev,
         if (IS_ERR(private_data)) {
                 dev_warn(dev, "Unable to get device private data in abs_show call\n");
                 result = -ENOENT;
-                goto store_error;
+                goto store_end;
         }
     
         mutex_lock(&private_data->mtx);
     
-        addr = &private_data->address_from_sysfs;
-    
+        addrp = &private_data->address_from_sysfs;
+        result = sscanf(buf, "%d", &val_buf);
+
+        if (result != 1) {
+                dev_err(dev, "Can't read value!\n");
+                result = -EINVAL;
+                goto store_end;
+        }
+
         if (strcmp(attr->attr.name, "abs_value") == 0) {
-                private_data->platform_data->data[*addr] = buf[0];
-                // One byte read anyway
-                result = 1;
+                if (val_buf > U8_MAX) {
+                        result = -EINVAL;
+                        goto store_end;
+                }
+                private_data->platform_data->data[*addrp] = val_buf;
+                
         } else {
-                // 4 bytes read anyway
-                result = 4;
-                *addr = ((unsigned int*)buf)[0];
-                if (private_data->address_from_sysfs > PAGE_SIZE_IN_BYTES) {
+                if (val_buf > PAGE_SIZE_IN_BYTES) {
                         dev_err(dev, "Invalid value for address write!\n");
                         private_data->address_from_sysfs = 0;
                         result = -EINVAL;
-                        goto store_error;
+                        goto store_end;
                 }
+                *addrp = val_buf;
         }
     
-        mutex_unlock(&private_data->mtx);
     
         dev_dbg(dev, "Storing is over, val:%d, addr:%d\n", 
-                private_data->platform_data->data[*addr], 
-                *addr);
-        return result;
+                private_data->platform_data->data[*addrp], 
+                *addrp);
 
-store_error:
+store_end:
         mutex_unlock(&private_data->mtx);
         return result;
 }

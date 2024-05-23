@@ -201,9 +201,7 @@ static int abs_probe(struct platform_device *dev_to_bind)
         already_bound = 0;
         dev_dbg(&dev_to_bind->dev, "Binding started\n");
       
-        dev_data = devm_kzalloc(&dev_to_bind->dev, 
-                                sizeof(struct abs_private_dev_data), 
-                                GFP_KERNEL);
+        dev_data = kzalloc(sizeof(struct abs_private_dev_data), GFP_KERNEL);
         if (!dev_data) {
                 dev_warn(&dev_to_bind->dev, "Memory allocation failed for dev struct!\n");
                 result = -ENOMEM;
@@ -216,12 +214,8 @@ static int abs_probe(struct platform_device *dev_to_bind)
                 dev_data->platform_data = platform_data;
                 if (platform_data->data) {
                         already_bound = 1;
-                } else {
-                        dev_data->platform_data->data = devm_kmalloc(&dev_to_bind->dev, 
-                                                             PAGE_SIZE_IN_BYTES, 
-                                                             GFP_KERNEL);
                 }
-
+                dev_data->platform_data->data = kmalloc(PAGE_SIZE_IN_BYTES, GFP_KERNEL);
                 if (!dev_data->platform_data->data) {
                         dev_warn(&dev_to_bind->dev, "Dev data alloc failed!\n");
                         result = -ENOMEM;
@@ -301,8 +295,8 @@ probe_dev_create_error:
 probe_setup_chd_error:
         kfree(dev_data->platform_data->data);
 
-probe_data_alloc_error:
-        kfree(dev_data);
+probe_data_alloc_error: 
+        kfree(dev_data); 
 
 probe_dev_alloc_error:
         return result;
@@ -316,13 +310,14 @@ probe_req_reg_error:
 static int abs_remove(struct platform_device *dev_to_destroy)
 {
         struct abs_private_dev_data *pdata;
-    
         dev_dbg(&dev_to_destroy->dev, "Device removing started\n");
         pdata = dev_get_drvdata(&dev_to_destroy->dev);
         ClearPageReserved(virt_to_page((unsigned long)pdata->platform_data->data));
+        kfree(pdata->platform_data->data);
         cdev_del(&pdata->cdev);
         mutex_destroy(&pdata->mtx);
         device_destroy(abs_class, pdata->dev_num);
+        kfree(pdata); 
     
         pr_debug("Device removed\n");
     

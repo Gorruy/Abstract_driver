@@ -152,13 +152,13 @@ static ssize_t abs_store(struct device *dev,
         mutex_lock(&private_data->mtx);
     
         addrp = &private_data->address_from_sysfs;
-        result = sscanf(buf, "%d", &val_buf);
 
-        if (result != 1) {
+        if (sscanf(buf, "%d %n", &val_buf, (int*)&count) != 1) {
                 dev_err(dev, "Can't read value!\n");
                 result = -EINVAL;
                 goto store_end;
         }
+        result = count;
 
         if (strcmp(attr->attr.name, "abs_value") == 0) {
                 if (val_buf > U8_MAX) {
@@ -170,7 +170,6 @@ static ssize_t abs_store(struct device *dev,
         } else {
                 if (val_buf > PAGE_SIZE_IN_BYTES) {
                         dev_err(dev, "Invalid value for address write!\n");
-                        private_data->address_from_sysfs = 0;
                         result = -EINVAL;
                         goto store_end;
                 }

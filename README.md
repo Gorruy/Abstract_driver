@@ -26,6 +26,8 @@ sudo rmmod abs_test_devices.ko
 ```sh
 sudo echo 10 | sudo tee -a /sys/devices/platform/abs_platform_device.0/abs_value
 sudo cat /sys/devices/platform/abs_platform_device.0/abs_value
+sudo echo 10 | sudo tee -a /sys/devices/platform/abs_platform_device.0/abs_address
+sudo cat /sys/devices/platform/abs_platform_device.0/abs_value
 ```
 Первая запишет в нулевой адрес значение 10, вторая ее прочитает
 

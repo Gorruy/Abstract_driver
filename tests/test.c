@@ -140,6 +140,29 @@ int write_read_check(void)
 
 }
 
+int lseek_check(void) {
+
+    FILE *filp1 = fopen(DEV_1, "r+w");
+    FILE *filp2 = fopen(DEV_2, "r+w");
+
+    
+}
+
+int sysfs_check(void) {
+
+    FILE *filp1 = fopen("/sys/devices/platform/abs_platform_device.0/abs_value", "wb+");
+    FILE *filp2 = fopen("/sys/devices/platform/abs_platform_device.0/abs_address", "wb+");
+
+    char *ch[4];
+    memset(ch, 0, 4);
+
+    ch[0] = 100;
+
+    fwrite(ch, 1, 4, filp2);
+    fflush(filp1);
+
+}
+
 int main(void) 
 {
     if (write_read_check()) {
@@ -150,6 +173,7 @@ int main(void)
         exit(1);
     }
 
+    sysfs_check();
     printf("All tests passed!\n");
     exit(0);
 }

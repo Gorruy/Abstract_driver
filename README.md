@@ -24,17 +24,10 @@ sudo rmmod abs_test_devices.ko
 ## Usage
 С помощью следующих команд можно быстро проверит работу abs_value
 ```sh
-sudo echo -n a | sudo tee -a /sys/devices/platform/abs_platform_device.0/abs_value
+sudo echo 10 | sudo tee -a /sys/devices/platform/abs_platform_device.0/abs_value
 sudo cat /sys/devices/platform/abs_platform_device.0/abs_value
 ```
-Первая запишет в нулевой адрес латинскую букву a (ее ascii код = 97), вторая ее прочитает (данные команды нельзя использовать для abs_address)
-
-В общем случае для использования sysfs можно применять функции:
-```
-fwrite(buf, 1, 4, filp); // Запись в abs_address
-fwrite(buf, 1, 1, filp); // Запись в abs_value
-```
-где buf - ссылка на масив байт, filp указатель на файл атрибута (FILE*)
+Первая запишет в нулевой адрес значение 10, вторая ее прочитает
 
 Проверить системные вызовы можно с помощью файла test.c в папке tests:
 ```sh

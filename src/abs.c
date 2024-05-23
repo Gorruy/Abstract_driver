@@ -196,10 +196,14 @@ static int abs_probe(struct platform_device *dev_to_bind)
         struct abs_private_dev_data *dev_data;
         struct device *abs_dev_fs;
         struct resource *res;
-    
+        int already_bound;
+
+        already_bound = 0;
         dev_dbg(&dev_to_bind->dev, "Binding started\n");
       
-        dev_data = kzalloc(sizeof(struct abs_private_dev_data), GFP_KERNEL);
+        dev_data = devm_kzalloc(&dev_to_bind->dev, 
+                                sizeof(struct abs_private_dev_data), 
+                                GFP_KERNEL);
         if (!dev_data) {
                 dev_warn(&dev_to_bind->dev, "Memory allocation failed for dev struct!\n");
                 result = -ENOMEM;
@@ -210,7 +214,13 @@ static int abs_probe(struct platform_device *dev_to_bind)
 
         if (platform_data) {
                 dev_data->platform_data = platform_data;
-                dev_data->platform_data->data = kmalloc(PAGE_SIZE_IN_BYTES, GFP_KERNEL);
+                if (platform_data->data) {
+                        already_bound = 1;
+                }
+
+                dev_data->platform_data->data = devm_kmalloc(&dev_to_bind->dev, 
+                                                             PAGE_SIZE_IN_BYTES, 
+                                                             GFP_KERNEL);
                 if (!dev_data->platform_data->data) {
                         dev_warn(&dev_to_bind->dev, "Dev data alloc failed!\n");
                         result = -ENOMEM;
@@ -234,9 +244,10 @@ static int abs_probe(struct platform_device *dev_to_bind)
                         goto probe_req_reg_error;
                 }
         
-                dev_data->address_from_sysfs = 0;
-                dev_data->value_from_sysfs = 0;
         }
+
+        dev_data->address_from_sysfs = 0;
+        dev_data->value_from_sysfs = 0;
       
         result = setup_chrdev(dev_data, dev_to_bind->id);
         if (result < 0) {
@@ -261,8 +272,11 @@ static int abs_probe(struct platform_device *dev_to_bind)
         dev_data->devp = &dev_to_bind->dev;
     
         dev_set_drvdata(&dev_to_bind->dev, dev_data);
-    
-    
+        if (already_bound) {
+                device_remove_file(&dev_to_bind->dev, &dev_attr_abs_address);
+                device_remove_file(&dev_to_bind->dev, &dev_attr_abs_value);
+        }
+
         if (device_create_file(&dev_to_bind->dev, &dev_attr_abs_value)) {
                 dev_warn(&dev_to_bind->dev, "Failed to create value attr\n");
                 goto probe_value_error;
@@ -305,11 +319,9 @@ static int abs_remove(struct platform_device *dev_to_destroy)
         dev_dbg(&dev_to_destroy->dev, "Device removing started\n");
         pdata = dev_get_drvdata(&dev_to_destroy->dev);
         ClearPageReserved(virt_to_page((unsigned long)pdata->platform_data->data));
-        kfree(pdata->platform_data->data);
         cdev_del(&pdata->cdev);
         mutex_destroy(&pdata->mtx);
         device_destroy(abs_class, pdata->dev_num);
-        kfree(pdata);
     
         pr_debug("Device removed\n");
     

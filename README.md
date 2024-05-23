@@ -29,7 +29,7 @@ sudo cat /sys/devices/platform/abs_platform_device.0/abs_value
 sudo echo 10 | sudo tee -a /sys/devices/platform/abs_platform_device.0/abs_address
 sudo cat /sys/devices/platform/abs_platform_device.0/abs_value
 ```
-Первая запишет в нулевой адрес значение 10, вторая ее прочитает
+Первая запишет в нулевой адрес значение 10, вторая его прочитает, третья перепишет значение адреса и четвертая прочитает из него.
 
 Проверить системные вызовы можно с помощью файла test.c в папке tests:
 ```sh

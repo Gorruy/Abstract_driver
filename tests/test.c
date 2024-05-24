@@ -79,6 +79,8 @@ int mmap_check(void)
         }
     }
 
+    munmap(buf, PAGE_SIZE);
+
     return 0;
 }
 

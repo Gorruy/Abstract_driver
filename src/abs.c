@@ -38,6 +38,10 @@ static loff_t abs_llseek(struct file*, loff_t, int);
 static int abs_mmap( struct file*, struct vm_area_struct*);
 static int abs_release (struct inode*, struct file*);
 
+static struct abs_drv_data {
+        struct device *devices[NUMBER_OF_DEVICES];
+        int dev_count;
+} abs_drv_data;
 
 struct abs_private_dev_data {
         abs_platform_data_t *platform_data;
@@ -196,10 +200,11 @@ static int abs_probe(struct platform_device *dev_to_bind)
         struct abs_private_dev_data *dev_data;
         struct device *abs_dev_fs;
         struct resource *res;
-        int already_bound;
 
-        already_bound = 0;
         dev_dbg(&dev_to_bind->dev, "Binding started\n");
+
+        abs_drv_data.devices[abs_drv_data.dev_count] = &dev_to_bind->dev;
+        abs_drv_data.dev_count += 1;
       
         dev_data = kzalloc(sizeof(struct abs_private_dev_data), GFP_KERNEL);
         if (!dev_data) {
@@ -212,9 +217,7 @@ static int abs_probe(struct platform_device *dev_to_bind)
 
         if (platform_data) {
                 dev_data->platform_data = platform_data;
-                if (platform_data->data) {
-                        already_bound = 1;
-                }
+
                 dev_data->platform_data->data = kmalloc(PAGE_SIZE_IN_BYTES, GFP_KERNEL);
                 if (!dev_data->platform_data->data) {
                         dev_warn(&dev_to_bind->dev, "Dev data alloc failed!\n");
@@ -267,10 +270,6 @@ static int abs_probe(struct platform_device *dev_to_bind)
         dev_data->devp = &dev_to_bind->dev;
     
         dev_set_drvdata(&dev_to_bind->dev, dev_data);
-        if (already_bound) {
-                device_remove_file(&dev_to_bind->dev, &dev_attr_abs_address);
-                device_remove_file(&dev_to_bind->dev, &dev_attr_abs_value);
-        }
 
         if (device_create_file(&dev_to_bind->dev, &dev_attr_abs_value)) {
                 dev_warn(&dev_to_bind->dev, "Failed to create value attr\n");
@@ -286,6 +285,7 @@ static int abs_probe(struct platform_device *dev_to_bind)
 
 probe_addr_error:
         device_remove_file(&dev_to_bind->dev, &dev_attr_abs_value);
+
 probe_value_error:
         device_destroy(abs_class, dev_data->dev_num);
 
@@ -299,9 +299,11 @@ probe_data_alloc_error:
         kfree(dev_data); 
 
 probe_dev_alloc_error:
+        abs_drv_data.dev_count -= 1;
         return result;
 
 probe_req_reg_error:
+        abs_drv_data.dev_count -= 1;
         kfree(dev_data);
         release_region(res->start, res->end - res->start);
         return result;
@@ -342,11 +344,19 @@ struct platform_driver abs_platform_driver = {
 
 static void abs_exit(void)
 {
+        int i;
+
         pr_debug("Cleaning\n");
         unregister_chrdev_region(MKDEV(abs_maj_num, 
                                        abs_minimal_minor), 
                                        NUMBER_OF_DEVICES);
         platform_driver_unregister(&abs_platform_driver);
+        
+        for (i = 0; i < abs_drv_data.dev_count; i++) {
+                device_remove_file(abs_drv_data.devices[i], &dev_attr_abs_address);
+                device_remove_file(abs_drv_data.devices[i], &dev_attr_abs_value);
+        }
+
         class_destroy(abs_class);
 }
 

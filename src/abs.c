@@ -38,11 +38,6 @@ static loff_t abs_llseek(struct file*, loff_t, int);
 static int abs_mmap( struct file*, struct vm_area_struct*);
 static int abs_release (struct inode*, struct file*);
 
-static struct abs_drv_data {
-        struct device *devices[NUMBER_OF_DEVICES];
-        int dev_count;
-} abs_drv_data;
-
 struct abs_private_dev_data {
         abs_platform_data_t *platform_data;
         struct cdev cdev;
@@ -203,9 +198,6 @@ static int abs_probe(struct platform_device *dev_to_bind)
 
         dev_dbg(&dev_to_bind->dev, "Binding started\n");
 
-        abs_drv_data.devices[abs_drv_data.dev_count] = &dev_to_bind->dev;
-        abs_drv_data.dev_count += 1;
-      
         dev_data = kzalloc(sizeof(struct abs_private_dev_data), GFP_KERNEL);
         if (!dev_data) {
                 dev_warn(&dev_to_bind->dev, "Memory allocation failed for dev struct!\n");
@@ -299,11 +291,9 @@ probe_data_alloc_error:
         kfree(dev_data); 
 
 probe_dev_alloc_error:
-        abs_drv_data.dev_count -= 1;
         return result;
 
 probe_req_reg_error:
-        abs_drv_data.dev_count -= 1;
         kfree(dev_data);
         release_region(res->start, res->end - res->start);
         return result;
@@ -314,6 +304,10 @@ static int abs_remove(struct platform_device *dev_to_destroy)
         struct abs_private_dev_data *pdata;
         dev_dbg(&dev_to_destroy->dev, "Device removing started\n");
         pdata = dev_get_drvdata(&dev_to_destroy->dev);
+
+        device_remove_file(&dev_to_destroy->dev, &dev_attr_abs_address);
+        device_remove_file(&dev_to_destroy->dev, &dev_attr_abs_value);
+
         ClearPageReserved(virt_to_page((unsigned long)pdata->platform_data->data));
         kfree(pdata->platform_data->data);
         cdev_del(&pdata->cdev);
@@ -321,8 +315,6 @@ static int abs_remove(struct platform_device *dev_to_destroy)
         device_destroy(abs_class, pdata->dev_num);
         kfree(pdata); 
 
-        abs_drv_data.dev_count -= 1;
-    
         pr_debug("Device removed\n");
     
         return 0;
@@ -346,18 +338,11 @@ struct platform_driver abs_platform_driver = {
 
 static void abs_exit(void)
 {
-        int i;
-
         pr_debug("Cleaning\n");
         unregister_chrdev_region(MKDEV(abs_maj_num, 
                                        abs_minimal_minor), 
                                        NUMBER_OF_DEVICES);
         platform_driver_unregister(&abs_platform_driver);
-        
-        for (i = 0; i < abs_drv_data.dev_count; i++) {
-                device_remove_file(abs_drv_data.devices[i], &dev_attr_abs_address);
-                device_remove_file(abs_drv_data.devices[i], &dev_attr_abs_value);
-        }
 
         class_destroy(abs_class);
 }

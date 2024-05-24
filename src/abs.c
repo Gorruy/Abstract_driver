@@ -141,7 +141,7 @@ static ssize_t abs_store(struct device *dev,
         /* Write callback for sysfs */
         ssize_t result;
         unsigned int *addrp;
-        unsigned int val_buf;
+        int val_buf;
         struct abs_private_dev_data *private_data;
     
         dev_dbg(dev, "Storing started\n");
@@ -165,14 +165,14 @@ static ssize_t abs_store(struct device *dev,
         result = count;
 
         if (strcmp(attr->attr.name, "abs_value") == 0) {
-                if (val_buf > U8_MAX) {
+                if (val_buf > U8_MAX || val_buf < 0) {
                         result = -EINVAL;
                         goto store_end;
                 }
                 private_data->platform_data->data[*addrp] = val_buf;
                 
         } else {
-                if (val_buf > PAGE_SIZE_IN_BYTES) {
+                if (val_buf > PAGE_SIZE_IN_BYTES || val_buf < 0) {
                         dev_err(dev, "Invalid value for address write!\n");
                         result = -EINVAL;
                         goto store_end;
@@ -320,6 +320,8 @@ static int abs_remove(struct platform_device *dev_to_destroy)
         mutex_destroy(&pdata->mtx);
         device_destroy(abs_class, pdata->dev_num);
         kfree(pdata); 
+
+        abs_drv_data.dev_count -= 1;
     
         pr_debug("Device removed\n");
     

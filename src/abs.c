@@ -16,6 +16,7 @@
 #include <linux/mm.h>
 #include <linux/kobject.h>
 #include <linux/dma-direct.h>
+#include <linux/moduleparam.h>
 
 #include <linux/version.h>
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 11, 0)
@@ -26,6 +27,9 @@
 
 #include "abs.h"
 
+
+static int NUMBER_OF_DEVICES = 4;
+module_param(NUMBER_OF_DEVICES, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 
 static struct class *abs_class;
 static int abs_maj_num;

@@ -6,6 +6,8 @@
 
 #include "abs.h"
 
+#define NUMBER_OF_DEVICES 4
+
 
 static void abs_dev_release(struct device *dev)
 {

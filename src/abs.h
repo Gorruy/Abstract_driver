@@ -5,7 +5,6 @@
 #include <linux/cdev.h>
 
 #define PAGE_SIZE_IN_BYTES 4096
-#define NUMBER_OF_DEVICES 4
 #define PLATFORM_DEVICE_NAME "abs_platform_device"
 #define DEV_NAME "abs"
 #define INDEX_SIZE 3 + 3

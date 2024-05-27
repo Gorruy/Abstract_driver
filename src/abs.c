@@ -202,6 +202,11 @@ static int abs_probe(struct platform_device *dev_to_bind)
 
         dev_dbg(&dev_to_bind->dev, "Binding started\n");
 
+        if (dev_to_bind->id >= NUMBER_OF_DEVICES) {
+                dev_err(&dev_to_bind->dev, "Devices number exceed max vale\n");
+                return -1;
+        }
+
         dev_data = kzalloc(sizeof(struct abs_private_dev_data), GFP_KERNEL);
         if (!dev_data) {
                 dev_warn(&dev_to_bind->dev, "Memory allocation failed for dev struct!\n");
